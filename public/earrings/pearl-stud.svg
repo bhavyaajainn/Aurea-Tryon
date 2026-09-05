@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <title>Pearl stud</title>
+  <defs>
+    <linearGradient id="g2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F5E3B4"/>
+      <stop offset="40%" stop-color="#C99F4E"/>
+      <stop offset="70%" stop-color="#8E6B2C"/>
+      <stop offset="100%" stop-color="#E8CE93"/>
+    </linearGradient>
+    <radialGradient id="pearl" cx="0.36" cy="0.3" r="0.85">
+      <stop offset="0%" stop-color="#FFFDF7"/>
+      <stop offset="45%" stop-color="#F2E9D6"/>
+      <stop offset="80%" stop-color="#D8C8A6"/>
+      <stop offset="100%" stop-color="#B9A47C"/>
+    </radialGradient>
+  </defs>
+  <circle cx="100" cy="44" r="7" fill="none" stroke="url(#g2)" stroke-width="4"/>
+  <circle cx="100" cy="112" r="52" fill="url(#pearl)" stroke="url(#g2)" stroke-width="3"/>
+  <ellipse cx="82" cy="90" rx="16" ry="10" fill="#FFFFFF" opacity="0.45"/>
+</svg>

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300" width="800" height="300">
+  <title>Hairline chain</title>
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F5E3B4"/>
+      <stop offset="35%" stop-color="#C99F4E"/>
+      <stop offset="60%" stop-color="#8E6B2C"/>
+      <stop offset="100%" stop-color="#E8CE93"/>
+    </linearGradient>
+  </defs>
+  <path d="M 18 34 Q 400 292 782 34" fill="none" stroke="url(#gold)" stroke-width="7" stroke-linecap="round"/>
+  <path d="M 18 34 Q 400 292 782 34" fill="none" stroke="#FFF6DE" stroke-width="1.6" stroke-linecap="round" opacity="0.55"/>
+  <g fill="url(#gold)">
+    <circle cx="400" cy="203" r="6.5"/>
+    <circle cx="330" cy="196" r="5.2"/>
+    <circle cx="470" cy="196" r="5.2"/>
+    <circle cx="255" cy="176" r="4.6"/>
+    <circle cx="545" cy="176" r="4.6"/>
+  </g>
+</svg>

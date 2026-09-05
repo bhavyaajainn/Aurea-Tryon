@@ -1,0 +1,8 @@
+node_modules
+.next
+.env
+.env.local
+public/jewelry
+data/catalog.json
+*.tsbuildinfo
+next-env.d.ts

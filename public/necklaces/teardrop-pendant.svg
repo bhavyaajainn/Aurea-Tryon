@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 460" width="800" height="460">
+  <title>Teardrop pendant</title>
+  <defs>
+    <linearGradient id="g2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F5E3B4"/>
+      <stop offset="40%" stop-color="#C99F4E"/>
+      <stop offset="70%" stop-color="#8E6B2C"/>
+      <stop offset="100%" stop-color="#E8CE93"/>
+    </linearGradient>
+    <radialGradient id="stone" cx="0.36" cy="0.28" r="0.85">
+      <stop offset="0%" stop-color="#FBF3FF"/>
+      <stop offset="30%" stop-color="#C9B8E8"/>
+      <stop offset="70%" stop-color="#7C68A8"/>
+      <stop offset="100%" stop-color="#413055"/>
+    </radialGradient>
+  </defs>
+  <path d="M 18 30 Q 400 268 782 30" fill="none" stroke="url(#g2)" stroke-width="6.5" stroke-linecap="round"/>
+  <path d="M 18 30 Q 400 268 782 30" fill="none" stroke="#FFF6DE" stroke-width="1.4" stroke-linecap="round" opacity="0.5"/>
+  <circle cx="400" cy="188" r="9" fill="none" stroke="url(#g2)" stroke-width="5"/>
+  <path d="M 400 214 C 356 268 340 316 400 372 C 460 316 444 268 400 214 Z" fill="url(#stone)" stroke="url(#g2)" stroke-width="6"/>
+  <path d="M 400 232 C 375 268 366 302 400 340" fill="none" stroke="#FFFFFF" stroke-width="4" opacity="0.4" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 260" width="800" height="260">
+  <title>Single-strand choker</title>
+  <defs>
+    <radialGradient id="pearl" cx="0.34" cy="0.3" r="0.8">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="45%" stop-color="#F2E7DC"/>
+      <stop offset="80%" stop-color="#CDBBAC"/>
+      <stop offset="100%" stop-color="#9C8878"/>
+    </radialGradient>
+  </defs>
+  <g fill="url(#pearl)">
+    <circle cx="24" cy="30" r="13"/><circle cx="68" cy="52" r="14"/><circle cx="114" cy="73" r="15"/>
+    <circle cx="162" cy="93" r="15.5"/><circle cx="212" cy="111" r="16"/><circle cx="264" cy="126" r="16.5"/>
+    <circle cx="318" cy="138" r="17"/><circle cx="374" cy="145" r="17.5"/><circle cx="400" cy="147" r="17.5"/>
+    <circle cx="426" cy="145" r="17.5"/><circle cx="482" cy="138" r="17"/><circle cx="536" cy="126" r="16.5"/>
+    <circle cx="588" cy="111" r="16"/><circle cx="638" cy="93" r="15.5"/><circle cx="686" cy="73" r="15"/>
+    <circle cx="732" cy="52" r="14"/><circle cx="776" cy="30" r="13"/>
+  </g>
+</svg>
