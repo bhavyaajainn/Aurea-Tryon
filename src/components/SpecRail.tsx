@@ -90,7 +90,7 @@ export function SpecRail({
           label="Drop"
           hint={activeKind === 'necklace' ? 'How far below the chin it rests' : 'How far below the earlobe it hangs'}
           value={active.calibration.offsetY}
-          min={-0.35}
+          min={-0.6}
           max={0.5}
           step={0.005}
           format={(v) => `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`}
