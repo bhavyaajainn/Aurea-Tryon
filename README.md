@@ -171,3 +171,5 @@ src/
   not a calibrated measurement.
 - Very reflective or transparent stones confuse the matting model. Shoot on a
   plain, contrasting surface.
+
+  Try it - https://www.aureatryon.store/
