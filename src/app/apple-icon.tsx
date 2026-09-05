@@ -1,4 +1,5 @@
 import { ImageResponse } from 'next/og';
+import { LOGOMARK_FACETS_PATH, LOGOMARK_OUTLINE_PATH } from '@/lib/logomark';
 
 export const size = { width: 180, height: 180 };
 export const contentType = 'image/png';
@@ -16,7 +17,16 @@ export default function AppleIcon() {
           background: '#120D15',
         }}
       >
-        <span style={{ fontSize: 96, color: '#E2C68B', fontFamily: 'serif' }}>A</span>
+        <svg width="108" height="108" viewBox="0 0 32 32" fill="none">
+          <path d={LOGOMARK_OUTLINE_PATH} stroke="#E2C68B" strokeWidth="1.4" strokeLinejoin="round" />
+          <path
+            d={LOGOMARK_FACETS_PATH}
+            stroke="#E2C68B"
+            strokeWidth="0.9"
+            strokeLinejoin="round"
+            opacity="0.55"
+          />
+        </svg>
       </div>
     ),
     size,

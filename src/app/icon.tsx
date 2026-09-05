@@ -1,4 +1,5 @@
 import { ImageResponse } from 'next/og';
+import { LOGOMARK_FACETS_PATH, LOGOMARK_OUTLINE_PATH } from '@/lib/logomark';
 
 export const size = { width: 32, height: 32 };
 export const contentType = 'image/png';
@@ -17,7 +18,16 @@ export default function Icon() {
           borderRadius: 6,
         }}
       >
-        <span style={{ fontSize: 20, color: '#E2C68B', fontFamily: 'serif' }}>A</span>
+        <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
+          <path d={LOGOMARK_OUTLINE_PATH} stroke="#E2C68B" strokeWidth="2" strokeLinejoin="round" />
+          <path
+            d={LOGOMARK_FACETS_PATH}
+            stroke="#E2C68B"
+            strokeWidth="1.3"
+            strokeLinejoin="round"
+            opacity="0.55"
+          />
+        </svg>
       </div>
     ),
     size,

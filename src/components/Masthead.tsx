@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { LOGOMARK_FACETS_PATH, LOGOMARK_OUTLINE_PATH } from '@/lib/logomark';
 
 /**
  * A jeweller stamps the metal, the karat, and the maker into the clasp. The
@@ -25,14 +26,9 @@ export function Masthead() {
 function Logomark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" fill="none" className={className} aria-hidden="true">
+      <path d={LOGOMARK_OUTLINE_PATH} stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
       <path
-        d="M16 3.2 L27.2 11.6 L21.2 28.8 H10.8 L4.8 11.6 Z"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M4.8 11.6 H27.2 M10.8 28.8 L16 11.6 L21.2 28.8 M16 3.2 L10.8 11.6 M16 3.2 L21.2 11.6"
+        d={LOGOMARK_FACETS_PATH}
         stroke="currentColor"
         strokeWidth="0.9"
         strokeLinejoin="round"
