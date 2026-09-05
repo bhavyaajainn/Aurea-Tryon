@@ -1,23 +1,20 @@
-# Aurea — necklace try-on
+# Aurea — virtual jewelry try-on
 
-Point a camera at yourself, pick a necklace, and it hangs where it would in life.
-Upload a product photo and the background comes off automatically, leaving only
-the piece.
+Upload a photo of your own necklace or earrings, point a camera at yourself,
+and it hangs where it would in life. No catalog, no admin, no account —
+everything happens in this one browser tab, for this one visitor.
 
-Built with Next.js 14 (App Router), MediaPipe Tasks Vision, and IMG.LY's
-background removal running in the browser.
+Built with Next.js 15 (App Router), MediaPipe Tasks Vision, and IMG.LY's
+background removal running client-side.
 
 ---
 
-## Two halves
-
-**Ingestion** (`/admin`) turns a product photo into a wearable overlay.
-**Try-on** (`/`) works out where a necklace would sit on you and keeps it there.
+## The journey
 
 ```
-  UPLOAD                                  TRY-ON
+  UPLOAD                                  MIRROR
   ──────                                  ──────
-  product photo                           camera frame
+  necklace / left ear / right ear         camera frame
        │                                       │
        ▼                                       ▼
   ISNet matting          ┌────────────►  FaceLandmarker (478 pts)
@@ -29,12 +26,19 @@ background removal running in the browser.
   trim to bounds         │               x, y, width, roll, yaw
        │                 │                     │
        ▼                 │                     ▼
-  transparent PNG ───────┘               One Euro filter
-  + calibration                                │
-       │                                       ▼
-       ▼                                 warp + shadow
-  catalog (JSON + disk)  ────────────►   composite to canvas
+  straighten (rotate)    │               One Euro filter
+  + smart eraser         │                     │
+       │                 │                     ▼
+       ▼                 │               warp + shadow
+  transparent PNG ───────┘               composite to canvas
+  (kept in memory only)                        │
+                                                ▼
+                                          Save picture (download)
 ```
+
+Nothing crosses the network except the piece's own cut-out (processed
+entirely in the browser) and, once, the ~40 MB matting model. No server
+database, no localStorage, no account — close the tab and it's gone.
 
 ## Running it
 
@@ -43,20 +47,35 @@ npm install
 npm run dev          # http://localhost:3000
 ```
 
-Three sample necklaces ship with the repo, so the mirror works before you
-upload anything. Add your own at `/admin`.
+No `.env` is required. Optionally set `NEXT_PUBLIC_SITE_URL` before deploying
+so the sitemap, robots.txt, and Open Graph tags point at your real domain
+instead of the placeholder in `src/lib/site.ts`.
 
-Optional `.env`:
+If you have no jewellery photo handy, three sample looks ship with the app
+(`src/lib/seeds.ts`) so the mirror can be tried immediately.
 
-```
-ADMIN_TOKEN=some-secret     # required to add or delete pieces; open if unset
-JEWELRY_STORAGE_DIR=public/jewelry
-```
+## The upload step
 
-## How the necklace gets positioned
+Each of the three boxes — necklace/pendant, left earring, right earring — is
+independent and optional; at least one has to be filled to continue.
 
-MediaPipe gives 478 face points and 33 body points. Neither includes a neck, so
-`src/lib/anchor.ts` derives one:
+1. **Cut-out** — `@imgly/background-removal`'s ISNet model segments the piece
+   by shape, not by colour-keying a background, so a plain white seamless, a
+   black velvet pad, or a busy tabletop all work the same way.
+2. **Straighten** — quarter-turn buttons plus a fine slider re-rotate the
+   already-cut piece (via `rotateCutout` in `src/lib/cutout.ts`) and re-trim
+   it, so levelling a photo shot at an angle is instant — no re-running the
+   matting model.
+3. **Smart eraser** — a brush that paints stray background, a display prop,
+   or a watermark to transparent, then re-crops.
+
+Filling only the left-earring box wears that piece on both ears, mirrored.
+Filling both sides wears each exactly as photographed, no mirroring.
+
+## The mirror step
+
+MediaPipe gives 478 face points and 33 body points. Neither includes a neck,
+so `src/lib/anchor.ts` derives one:
 
 - **Shoulders visible** — width comes from shoulder span × 0.6, roll from the
   shoulder line, and the anchor sits 26% of the way down the chin-to-shoulder
@@ -75,81 +94,73 @@ plain exponential smoothing.
 
 Two touches sell the composite in `src/lib/renderer.ts`: the chain is sliced
 into 48 vertical strips and offset along a parabola so the middle hangs lower
-than the ends, and a blurred dark copy sits underneath as a contact shadow. Both
-are cached in an offscreen buffer keyed on quantised width/curve/yaw, so the
-warp only recomputes when the shape actually changes.
+than the ends, and a blurred dark copy sits underneath as a contact shadow.
 
-## How the background comes off
+The fit card (`SpecRail`) exposes drop, sway, size, drape, tilt, shadow, and
+opacity — each with a plain-language description of what it does — plus
+spread for a pair of earrings. Nothing is ever saved back anywhere: reset
+puts a piece back to its default, and reloading the page starts over.
 
-Segmentation alone is not enough — raw output leaves a halo around thin chain
-links, stray blobs where a hand or prop was, a display prop (a bust, a stand)
-welded straight onto the piece with no gap the matte could ever separate, and a
-large transparent margin that breaks the scaling maths. `src/lib/cutout.ts`
-runs six stages:
+The mirror can run full-screen (top-right toggle) or inline, live from the
+camera or against an uploaded photo, and "Save picture" downloads exactly
+what's on screen as a PNG — that download is the only thing this app ever
+writes to your device.
 
-1. **Segment** — ISNet alpha matte via `@imgly/background-removal`.
-2. **Despeckle** — flood-fill every opaque region, bridging small gaps first
-   (so a strand of separate beads reads as one piece, not noise), keep the
-   largest plus anything big enough to be a real element, erase the rest.
-   This is what removes a hand or a price tag without touching the chain.
-3. **Strip prop** — peel away a smooth display prop fused to the piece at the
-   frame's edge: flood-fill inward from the canvas border through low-texture
-   opaque pixels only, stopping the moment real jewellery detail (a facet, a
-   bead) is hit. Backs off entirely if it would erase too much of the piece.
-4. **Decontaminate** — semi-transparent edge pixels still carry the old
-   background's colour and show as a pale rim over skin, so each is re-weighted
-   toward its solid neighbours.
-5. **Tighten** — steepen the alpha ramp so fine chains read crisp.
-6. **Trim** — crop to the piece and record the true aspect ratio.
+## SEO
 
-This runs in the browser. The first cut of a session downloads roughly 40 MB of
-model weights; after that every upload is free, private, and needs no server GPU.
-Photos are never uploaded — only the finished cut-out is sent.
+- `src/app/layout.tsx` — full metadata: title template, description,
+  keywords, Open Graph + Twitter cards, canonical URL, robots directives,
+  and JSON-LD (`WebApplication`) structured data.
+- `src/app/sitemap.ts`, `src/app/robots.ts`, `src/app/manifest.ts` — generated,
+  not hand-maintained.
+- `src/app/opengraph-image.tsx`, `icon.tsx`, `apple-icon.tsx` — generated at
+  build time with `next/og`, no binary assets to keep in sync.
+- The homepage is fully static (no server data fetch), which keeps it fast —
+  Core Web Vitals matter for ranking as much as on-page content does.
 
-## Tuning
-
-Per-piece adjustments live in the fit card on the right of the mirror: drop,
-sway, size, drape, tilt, shadow, opacity. Save them and they become that piece's
-defaults for everyone.
-
-Global constants are in the `T` block at the top of `src/lib/anchor.ts`. Start
-there if pieces sit consistently high or wide across every necklace.
+No name or copy can guarantee a #1 ranking on its own — that also depends on
+backlinks, domain age, and how competitive the term is, none of which live in
+this codebase. This gets the on-page half right.
 
 ## Layout
 
 ```
 src/
   app/
-    page.tsx                 mirror
-    admin/page.tsx           workshop
-    api/jewelry/             catalog REST
+    page.tsx                 the whole journey lives behind TryOnApp
+    layout.tsx, sitemap.ts, robots.ts, manifest.ts, opengraph-image.tsx, icon.tsx
   lib/
     anchor.ts                landmarks -> a place to hang a necklace
     tracker.ts               MediaPipe wrapper, both graphs
     oneEuro.ts               adaptive smoothing
     renderer.ts              drape warp, contact shadow, buffer cache
-    cutout.ts                the six-stage background removal
-    catalog.ts               file-backed store
-    store.ts                 client state
+    cutout.ts                six-stage background removal + rotate
+    seeds.ts                 the static sample looks
+    site.ts                  SEO constants (name, description, URL)
+    store.ts                 client state — the wizard step and the worn pieces
   hooks/useTryOnEngine.ts    camera, render loop, capture
-  components/                MirrorStage, Workshop, JewelryTray, SpecRail
+  components/
+    TryOnApp.tsx             the upload step + hands off to the mirror
+    PieceUploader.tsx         one upload box: cut, straighten, erase
+    CutoutEraser.tsx          the brush-erase modal
+    MirrorStage.tsx           the camera / photo stage
+    SpecRail.tsx              the fit card
 ```
 
 ## Before production
 
 - **Self-host the models.** `TRACKER_ASSETS` in `src/lib/tracker.ts` points at
-  Google's buckets. Fine for development; you do not want a third party in your
-  critical path in production.
-- **Replace the catalog.** `src/lib/catalog.ts` writes JSON and PNGs to disk,
-  which does not survive a serverless deploy. Swap the IO helpers for S3/R2 plus
-  a real database — the exported function signatures are the seam, and nothing
-  above that file changes.
+  Google's buckets, and the matting model comes from IMG.LY's CDN. Fine for
+  development; you do not want a third party in your critical path in
+  production.
 - **Cross-origin isolation** is already set in `next.config.mjs` (COOP
   `same-origin`, COEP `credentialless`). It lets onnxruntime use threaded WASM,
   worth roughly 3-4× on cutting. Check it does not conflict with any embeds you
   add later.
 - **Consider a worker.** Inference currently runs on the main thread. Moving it
   to a worker with OffscreenCanvas is the right next step for low-end phones.
+- **Set `NEXT_PUBLIC_SITE_URL`** to the real deployed domain so sitemap,
+  robots, and social previews stop pointing at the placeholder.
 
 ## Known limits
 

@@ -18,6 +18,9 @@ const config: Config = {
         bone: '#F2EDE4',
         ash: '#9A8FA0',
         oxblood: '#6B2233',
+        // Same family as oxblood, lightened so alert/error text clears WCAG AA
+        // (4.5:1) against the velvet backgrounds — oxblood itself sits near 1.7:1.
+        garnet: '#E8929E',
       },
       fontFamily: {
         display: ['var(--font-display)', 'Georgia', 'serif'],

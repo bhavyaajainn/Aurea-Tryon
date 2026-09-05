@@ -38,29 +38,47 @@ export class NeckTracker {
   private earRSmoother = new AnchorSmoother();
   private lastVideoTime = -1;
   private cachedFrame: TrackerFrame = { anchor: null, earL: null, earR: null, hasFace: false, hasShoulders: false };
+  /** True while detectImage() has the shared landmarkers switched to IMAGE mode. */
+  private imageModeActive = false;
 
   constructor(private quality: TrackerQuality = 'balanced') {}
 
   async load(): Promise<void> {
     const fileset = await FilesetResolver.forVisionTasks(TRACKER_ASSETS.wasm);
 
-    this.face = await FaceLandmarker.createFromOptions(fileset, {
-      baseOptions: { modelAssetPath: TRACKER_ASSETS.face, delegate: 'GPU' },
-      runningMode: 'VIDEO',
-      numFaces: 1,
-      outputFaceBlendshapes: false,
-      outputFacialTransformationMatrixes: false,
-    });
+    // MediaPipe's WASM runtime logs a routine initialisation notice —
+    // "Created TensorFlow Lite XNNPACK delegate for CPU" — through
+    // console.error rather than console.info. In dev that trips Next's error
+    // overlay on every model load as if the app had thrown. Filter just that
+    // one known-benign line for the duration of this call; everything else
+    // still passes through untouched.
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => {
+      if (typeof args[0] === 'string' && args[0].includes('Created TensorFlow Lite XNNPACK delegate')) return;
+      originalError(...args);
+    };
 
-    if (this.quality === 'balanced') {
-      this.pose = await PoseLandmarker.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: TRACKER_ASSETS.pose, delegate: 'GPU' },
+    try {
+      this.face = await FaceLandmarker.createFromOptions(fileset, {
+        baseOptions: { modelAssetPath: TRACKER_ASSETS.face, delegate: 'GPU' },
         runningMode: 'VIDEO',
-        numPoses: 1,
-        minPoseDetectionConfidence: 0.5,
-        minPosePresenceConfidence: 0.5,
-        minTrackingConfidence: 0.5,
+        numFaces: 1,
+        outputFaceBlendshapes: false,
+        outputFacialTransformationMatrixes: false,
       });
+
+      if (this.quality === 'balanced') {
+        this.pose = await PoseLandmarker.createFromOptions(fileset, {
+          baseOptions: { modelAssetPath: TRACKER_ASSETS.pose, delegate: 'GPU' },
+          runningMode: 'VIDEO',
+          numPoses: 1,
+          minPoseDetectionConfidence: 0.5,
+          minPosePresenceConfidence: 0.5,
+          minTrackingConfidence: 0.5,
+        });
+      }
+    } finally {
+      console.error = originalError;
     }
   }
 
@@ -73,7 +91,7 @@ export class NeckTracker {
    * has not advanced, which happens whenever rAF outruns the camera.
    */
   detectVideo(video: HTMLVideoElement, timestampMs: number): TrackerFrame {
-    if (!this.face || video.readyState < 2) return this.cachedFrame;
+    if (!this.face || this.imageModeActive || video.readyState < 2) return this.cachedFrame;
     if (video.currentTime === this.lastVideoTime) return this.cachedFrame;
     this.lastVideoTime = video.currentTime;
 
@@ -108,6 +126,7 @@ export class NeckTracker {
     let earR = null;
     let usedShoulders = false;
 
+    this.imageModeActive = true;
     try {
       await this.face.setOptions({ runningMode: 'IMAGE' });
       faceRes = this.face.detect(image);
@@ -138,6 +157,7 @@ export class NeckTracker {
       await this.face.setOptions({ runningMode: 'VIDEO' });
       if (this.pose) await this.pose.setOptions({ runningMode: 'VIDEO' });
       this.lastVideoTime = -1;
+      this.imageModeActive = false;
     }
 
     return { anchor, earL, earR, hasFace: !!faceRes?.faceLandmarks?.length, hasShoulders: usedShoulders };

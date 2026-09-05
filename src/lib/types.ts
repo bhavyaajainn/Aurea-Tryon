@@ -75,18 +75,6 @@ export interface JewelryItem {
   createdAt: string;
 }
 
-/**
- * A complete look: a pendant, a pair of earrings, or both worn together. Either
- * id may be absent — a set only needs to name at least one piece.
- */
-export interface JewelrySet {
-  id: string;
-  name: string;
-  necklaceId: string | null;
-  earringId: string | null;
-  createdAt: string;
-}
-
 /** What the tracker hands the renderer each frame. */
 export interface NeckAnchor {
   /** Centre of the collarbone hollow, in canvas pixels. */

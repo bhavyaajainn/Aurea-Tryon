@@ -2,7 +2,7 @@
   "name": "aurea-tryon",
   "version": "1.0.0",
   "private": true,
-  "description": "Virtual necklace try-on. Cuts jewelry out of its background on upload, then drapes it on the wearer's neck in a live camera feed.",
+  "description": "Virtual jewelry try-on. Visitors upload their own necklace and earring photos, the background comes off in the browser, and the piece is draped on the wearer in a live camera feed — nothing is ever uploaded to a server.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

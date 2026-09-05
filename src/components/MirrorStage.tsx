@@ -2,22 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
-import { Maximize2, Minimize2 } from 'lucide-react';
+import { ArrowLeft, Maximize2, Minimize2 } from 'lucide-react';
 import { useTryOnEngine } from '@/hooks/useTryOnEngine';
-import { selectedEarring, selectedNecklace, useTryOn } from '@/lib/store';
-import { JewelryTray } from './JewelryTray';
+import { useTryOn } from '@/lib/store';
 import { SpecRail } from './SpecRail';
-import type { JewelryItem, JewelrySet } from '@/lib/types';
 
 /**
  * The mirror itself. Everything visible is painted into one canvas — video
  * frame, then necklace, then earrings, then optional guides — so a capture is
  * exactly what the viewer saw, with no compositing surprises.
  */
-export function MirrorStage({ initialItems, initialSets }: { initialItems: JewelryItem[]; initialSets: JewelrySet[] }) {
-  const items = useTryOn((s) => s.items);
-  const sets = useTryOn((s) => s.sets);
-  const selectedSetId = useTryOn((s) => s.selectedSetId);
+export function MirrorStage({ onBack }: { onBack: () => void }) {
   const necklaceCalibration = useTryOn((s) => s.necklaceCalibration);
   const earringCalibration = useTryOn((s) => s.earringCalibration);
   const mirror = useTryOn((s) => s.mirror);
@@ -25,13 +20,9 @@ export function MirrorStage({ initialItems, initialSets }: { initialItems: Jewel
   const mode = useTryOn((s) => s.mode);
   const photoUrl = useTryOn((s) => s.photoUrl);
   const showGuides = useTryOn((s) => s.showGuides);
-  const necklace = useTryOn(selectedNecklace);
-  const earring = useTryOn(selectedEarring);
+  const necklace = useTryOn((s) => s.necklace);
+  const earring = useTryOn((s) => s.earring);
 
-  const setCatalog = useTryOn((s) => s.setCatalog);
-  const updateItem = useTryOn((s) => s.updateItem);
-  const selectSet = useTryOn((s) => s.selectSet);
-  const removeSet = useTryOn((s) => s.removeSet);
   const patchNecklaceCalibration = useTryOn((s) => s.patchNecklaceCalibration);
   const patchEarringCalibration = useTryOn((s) => s.patchEarringCalibration);
   const resetCalibration = useTryOn((s) => s.resetCalibration);
@@ -40,7 +31,6 @@ export function MirrorStage({ initialItems, initialSets }: { initialItems: Jewel
   const setPhotoUrl = useTryOn((s) => s.setPhotoUrl);
   const toggleGuides = useTryOn((s) => s.toggleGuides);
 
-  const [savingKind, setSavingKind] = useState<'necklace' | 'earring' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -80,13 +70,10 @@ export function MirrorStage({ initialItems, initialSets }: { initialItems: Jewel
     });
   }
 
-  useEffect(() => {
-    setCatalog(initialItems, initialSets);
-  }, [initialItems, initialSets, setCatalog]);
-
   // Preloaded overlay bitmaps, keyed by piece id (a pair's right-ear image
   // gets a suffixed key). Decoding on selection would drop the first few
-  // frames of every switch.
+  // frames of every switch. Each fresh upload gets a fresh id, so a changed
+  // photo always decodes a new bitmap rather than reusing a stale one.
   const overlays = useRef(new Map<string, HTMLImageElement>());
   useEffect(() => {
     const preload = (key: string, url: string) => {
@@ -96,11 +83,12 @@ export function MirrorStage({ initialItems, initialSets }: { initialItems: Jewel
       img.src = url;
       overlays.current.set(key, img);
     };
-    items.forEach((item) => {
-      preload(item.id, item.imageUrl);
-      if (item.pairImageUrl) preload(pairKey(item.id), item.pairImageUrl);
-    });
-  }, [items]);
+    if (necklace) preload(necklace.id, necklace.imageUrl);
+    if (earring) {
+      preload(earring.id, earring.imageUrl);
+      if (earring.pairImageUrl) preload(pairKey(earring.id), earring.pairImageUrl);
+    }
+  }, [necklace, earring]);
 
   const necklaceCalRef = useRef(necklaceCalibration);
   necklaceCalRef.current = necklaceCalibration;
@@ -117,6 +105,7 @@ export function MirrorStage({ initialItems, initialSets }: { initialItems: Jewel
     quality,
     mirror,
     showGuides,
+    mode,
     getOverlay: () => {
       const nId = necklaceIdRef.current;
       const eId = earringIdRef.current;
@@ -148,13 +137,16 @@ export function MirrorStage({ initialItems, initialSets }: { initialItems: Jewel
     if (mode !== 'photo' || !photoUrl) return;
     const t = setTimeout(() => void renderPhotoRef.current(), 40);
     return () => clearTimeout(t);
-  }, [mode, photoUrl, necklaceCalibration, earringCalibration, selectedSetId, showGuides]);
+  }, [mode, photoUrl, necklaceCalibration, earringCalibration, necklace, earring, showGuides]);
 
   const busy = engine.status === 'loading-models' || engine.status === 'starting-camera';
 
   function handlePhoto(file: File | undefined) {
     if (!file) return;
     if (photoUrl) URL.revokeObjectURL(photoUrl);
+    // Leaving Live mode for a static photo shouldn't leave the camera hardware
+    // (and its on-device indicator) running in the background.
+    engine.stopCamera();
     setPhotoUrl(URL.createObjectURL(file));
     setMode('photo');
   }
@@ -165,37 +157,10 @@ export function MirrorStage({ initialItems, initialSets }: { initialItems: Jewel
       setNotice('There is nothing on the mirror to save yet.');
       return;
     }
-    const set = sets.find((s) => s.id === selectedSetId);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `aurea-${(set?.name ?? 'try-on').toLowerCase().replace(/\s+/g, '-')}.png`;
+    a.download = 'aurea-try-on.png';
     a.click();
-  }
-
-  async function saveFit(kind: 'necklace' | 'earring') {
-    const piece = kind === 'necklace' ? necklace : earring;
-    const calibration = kind === 'necklace' ? necklaceCalibration : earringCalibration;
-    if (!piece) return;
-    if (piece.id.startsWith('seed-')) {
-      setNotice('Sample pieces keep their original fit. Upload your own to save adjustments.');
-      return;
-    }
-    setSavingKind(kind);
-    try {
-      const res = await fetch(`/api/jewelry/${piece.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ calibration }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? 'Could not save the fit.');
-      updateItem(data.item as JewelryItem);
-      setNotice(`Saved the fit for ${piece.name}.`);
-    } catch (e) {
-      setNotice(e instanceof Error ? e.message : 'Could not save the fit.');
-    } finally {
-      setSavingKind(null);
-    }
   }
 
   const statusLine = useMemo(() => {
@@ -206,34 +171,30 @@ export function MirrorStage({ initialItems, initialSets }: { initialItems: Jewel
     return null;
   }, [engine.status, engine.error, engine.diagnostics.hasFace]);
 
-  const necklaceFit = {
-    item: necklace,
-    calibration: necklaceCalibration,
-    onChange: patchNecklaceCalibration,
-    onSave: () => void saveFit('necklace'),
-    saving: savingKind === 'necklace',
-  };
-  const earringFit = {
-    item: earring,
-    calibration: earringCalibration,
-    onChange: patchEarringCalibration,
-    onSave: () => void saveFit('earring'),
-    saving: savingKind === 'earring',
-  };
+  const necklaceFit = { item: necklace, calibration: necklaceCalibration, onChange: patchNecklaceCalibration };
+  const earringFit = { item: earring, calibration: earringCalibration, onChange: patchEarringCalibration };
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div
         ref={stageWrapRef}
         className={clsx(
-          'space-y-4',
+          // min-w-0 opts this grid item out of the browser's automatic
+          // content-based minimum width — without it, the stage panel's
+          // aspect-ratio + min-height below gets transferred into a min-width
+          // (min-height × 4∶3) that can exceed a narrow viewport and blow out
+          // the grid track.
+          'min-w-0 space-y-4',
           isFullscreen && 'fixed inset-0 z-50 flex flex-col justify-center bg-velvet-950 p-4',
         )}
       >
         <div
           className={clsx(
             'case-panel relative w-full overflow-hidden',
-            isFullscreen ? 'min-h-0 flex-1' : 'aspect-[4/3]',
+            // A floor on the short side: below ~420px wide, a plain 4:3 box gets
+            // too short for the centered "Start the mirror" copy to clear the
+            // fullscreen toggle pinned in the corner.
+            isFullscreen ? 'min-h-0 flex-1' : 'aspect-[4/3] min-h-[320px]',
           )}
         >
           <video ref={engine.videoRef} playsInline muted className="hidden" />
@@ -275,7 +236,10 @@ export function MirrorStage({ initialItems, initialSets }: { initialItems: Jewel
           )}
 
           {engine.status === 'running' && statusLine && (
-            <p className="absolute left-4 top-4 rounded-[2px] border border-white/10 bg-velvet-950/75 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ash backdrop-blur">
+            <p
+              role="status"
+              className="absolute left-4 top-4 rounded-[2px] border border-white/10 bg-velvet-950/75 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ash backdrop-blur"
+            >
               {statusLine}
             </p>
           )}
@@ -291,7 +255,7 @@ export function MirrorStage({ initialItems, initialSets }: { initialItems: Jewel
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <input
             ref={fileRef}
             type="file"
@@ -299,20 +263,26 @@ export function MirrorStage({ initialItems, initialSets }: { initialItems: Jewel
             className="sr-only"
             onChange={(e) => handlePhoto(e.target.files?.[0])}
           />
-          <Toggle active={mode === 'camera'} onClick={() => { setMode('camera'); void engine.start(); }}>
-            Live
-          </Toggle>
-          <Toggle active={mode === 'photo'} onClick={() => fileRef.current?.click()}>
-            Photo
-          </Toggle>
-          <span className="mx-1 hidden h-4 w-px bg-white/10 sm:block" />
-          <Toggle active={mirror} onClick={() => setMirror(!mirror)}>
-            Flip
-          </Toggle>
-          <Toggle active={showGuides} onClick={toggleGuides}>
-            Guide
-          </Toggle>
-          <button type="button" onClick={handleCapture} className="gilt-button ml-auto">
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={onBack} className="ghost-button" aria-label="Back to upload">
+              <ArrowLeft size={13} />
+              Back
+            </button>
+            <span className="mx-1 hidden h-4 w-px bg-white/10 sm:block" />
+            <Toggle active={mode === 'camera'} onClick={() => { setMode('camera'); void engine.start(); }}>
+              Live
+            </Toggle>
+            <Toggle active={mode === 'photo'} onClick={() => fileRef.current?.click()}>
+              Photo
+            </Toggle>
+            <Toggle active={mirror} onClick={() => setMirror(!mirror)}>
+              Flip
+            </Toggle>
+            <Toggle active={showGuides} onClick={toggleGuides}>
+              Guide
+            </Toggle>
+          </div>
+          <button type="button" onClick={handleCapture} className="gilt-button w-full sm:ml-auto sm:w-auto">
             Save picture
           </button>
         </div>
@@ -322,8 +292,6 @@ export function MirrorStage({ initialItems, initialSets }: { initialItems: Jewel
             {notice}
           </p>
         )}
-
-        <JewelryTray sets={sets} items={items} selectedId={selectedSetId} onSelect={selectSet} onRemove={removeSet} />
       </div>
 
       <SpecRail necklace={necklaceFit} earring={earringFit} diagnostics={engine.diagnostics} onReset={resetCalibration} />

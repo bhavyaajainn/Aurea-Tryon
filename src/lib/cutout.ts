@@ -28,13 +28,6 @@ export interface CutoutOptions {
   despeckleRatio?: number;
   /** Higher = harder edges. 1 leaves the model's ramp alone. */
   edgeContrast?: number;
-  /**
-   * When true, a photo holding two comparably-sized pieces — the way a pair
-   * of earrings is usually shot — is split into two separate results instead
-   * of being kept as one merged cut-out. Off by default: a necklace photo
-   * with a detached clasp or a second strand should never be split.
-   */
-  allowPair?: boolean;
   onProgress?: (stage: string, ratio: number) => void;
 }
 
@@ -53,17 +46,47 @@ const DEFAULTS = {
   alphaFloor: 12,
   despeckleRatio: 0.0006,
   edgeContrast: 1.6,
-  allowPair: false,
 };
 
 /**
- * Turns a product photo into one or two wearable overlays. Returns two
- * results, left-to-right as framed in the source photo, only when
- * `allowPair` is set and the photo actually held two matched pieces —
- * otherwise always one.
+ * How long the model download/inference can go with no progress callback
+ * before we give up and surface an error instead of hanging forever. The
+ * model itself streams from a third-party CDN (see resources.json in
+ * @imgly/background-removal), so a stalled or blocked connection would
+ * otherwise leave the upload UI stuck on "Loading the matting model"
+ * indefinitely with no way out but a page reload.
  */
+const MODEL_STALL_TIMEOUT_MS = 45_000;
+
+/**
+ * Races a promise against a rolling inactivity timeout rather than a flat
+ * deadline, so genuine (slow but progressing) downloads aren't killed early —
+ * only a connection that stops making progress entirely trips it.
+ */
+function rejectOnStall<T>(promise: Promise<T>, idleMs: () => number, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const interval = setInterval(() => {
+      if (idleMs() > timeoutMs) {
+        clearInterval(interval);
+        reject(new Error(message));
+      }
+    }, 1000);
+    promise.then(
+      (v) => {
+        clearInterval(interval);
+        resolve(v);
+      },
+      (e) => {
+        clearInterval(interval);
+        reject(e);
+      },
+    );
+  });
+}
+
+/** Turns a product photo into one wearable overlay. */
 export async function cutOutJewelry(file: File | Blob, opts: CutoutOptions = {}): Promise<CutoutResult[]> {
-  const { alphaFloor, despeckleRatio, edgeContrast, allowPair } = { ...DEFAULTS, ...opts };
+  const { alphaFloor, despeckleRatio, edgeContrast } = { ...DEFAULTS, ...opts };
   const report = opts.onProgress ?? (() => {});
 
   report('Loading the matting model', 0.05);
@@ -74,18 +97,25 @@ export async function cutOutJewelry(file: File | Blob, opts: CutoutOptions = {})
   // import keeps it out of the server graph entirely.
   const { removeBackground } = await import('@imgly/background-removal');
 
+  let lastProgressAt = Date.now();
   const config: Config = {
     // isnet is the accurate one. Swap to 'isnet_quint8' if first-load size matters
     // more than clean edges on thin chains.
     model: 'isnet',
     output: { format: 'image/png', quality: 1 },
     progress: (key, current, total) => {
+      lastProgressAt = Date.now();
       if (total > 0) report('Loading the matting model', 0.05 + (current / total) * 0.35);
     },
   };
 
   report('Separating the piece from its background', 0.45);
-  const raw = await removeBackground(file, config);
+  const raw = await rejectOnStall(
+    removeBackground(file, config),
+    () => Date.now() - lastProgressAt,
+    MODEL_STALL_TIMEOUT_MS,
+    'The background-removal model is taking too long to load. Check your connection and try again.',
+  );
 
   report('Cleaning the edges', 0.7);
   const bitmap = await createImageBitmap(raw);
@@ -105,17 +135,14 @@ export async function cutOutJewelry(file: File | Blob, opts: CutoutOptions = {})
   ctx.putImageData(img, 0, 0);
 
   report('Cropping to the piece', 0.88);
-  const pieces = allowPair ? splitPair(canvas) : [canvas];
-  const cropped = (await Promise.all(pieces.map((piece) => finalizeCutout(piece)))).filter(
-    (c): c is CutoutResult => c !== null,
-  );
-  if (cropped.length === 0) {
+  const cropped = await finalizeCutout(canvas);
+  if (!cropped) {
     throw new Error('Nothing left after the cut. Try a photo with the piece on a plain background.');
   }
 
   report('Done', 1);
 
-  return cropped;
+  return [cropped];
 }
 
 /**
@@ -135,6 +162,45 @@ export async function finalizeCutout(canvas: HTMLCanvasElement): Promise<CutoutR
     height: trimmed.canvas.height,
     coverage: trimmed.coverage,
   };
+}
+
+/**
+ * Rotates a finished cut-out by an arbitrary angle and re-trims it — the fix
+ * for a piece photographed at a slight tilt, or turned a quarter-turn by a
+ * phone's orientation metadata. Draws onto a canvas sized to the rotated
+ * bounding box (so corners never clip), then reuses {@link finalizeCutout}
+ * for the same re-trim/re-encode the rest of the pipeline goes through.
+ */
+export async function rotateCutout(cutout: CutoutResult, degrees: number): Promise<CutoutResult | null> {
+  if (degrees % 360 === 0) return cutout;
+
+  const img = new Image();
+  const loaded = new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error('Could not read the cut-out to rotate it.'));
+  });
+  img.src = cutout.dataUrl;
+  await loaded;
+
+  const rad = (degrees * Math.PI) / 180;
+  const sin = Math.abs(Math.sin(rad));
+  const cos = Math.abs(Math.cos(rad));
+  const w = cutout.width;
+  const h = cutout.height;
+  const outW = Math.ceil(w * cos + h * sin);
+  const outH = Math.ceil(w * sin + h * cos);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = outW;
+  canvas.height = outH;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.translate(outW / 2, outH / 2);
+  ctx.rotate(rad);
+  ctx.drawImage(img, -w / 2, -h / 2, w, h);
+
+  return finalizeCutout(canvas);
 }
 
 /**
@@ -438,110 +504,6 @@ function tightenAlpha(img: ImageData, alphaFloor: number, contrast: number): voi
     const shaped = 1 / (1 + Math.exp(-(norm - 0.5) * 6 * contrast));
     data[i] = Math.round(Math.min(1, shaped) * 255);
   }
-}
-
-/**
- * Splits a cleaned cut-out into two canvases when its opaque pixels fall into
- * two clearly separated vertical bands — the signature of a pair of earrings
- * shot side by side. Returns the original canvas unsplit when there's only
- * one band, or when a second band is too light to be a matching earring
- * rather than debris (a jump ring, a price-tag corner the matting model
- * missed).
- *
- * This works on column occupancy rather than connected components on
- * purpose: a single earring's stud and drop are often two disconnected alpha
- * regions joined by a hairline chain that anti-aliasing thins to nothing, but
- * they still sit in overlapping columns, so they never get pulled apart. Two
- * side-by-side earrings, by contrast, share no columns at all.
- */
-function splitPair(canvas: HTMLCanvasElement): HTMLCanvasElement[] {
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) return [canvas];
-  const { width: w, height: h } = canvas;
-  const { data } = ctx.getImageData(0, 0, w, h);
-
-  const runs = columnRuns(data, w, h);
-  if (runs.length < 2) return [canvas];
-
-  runs.sort((a, b) => b.mass - a.mass);
-  const [first, second] = runs;
-  if (second.mass < first.mass * 0.35) return [canvas];
-
-  return [first, second].sort((a, b) => a.x0 - b.x0).map((run) => cropRun(canvas, data, w, h, run));
-}
-
-interface ColumnRun {
-  x0: number;
-  x1: number;
-  /** Opaque pixel count inside this band — used to tell a real piece from debris. */
-  mass: number;
-}
-
-/**
- * Contiguous horizontal bands that contain at least one non-transparent pixel,
- * separated by fully-transparent gaps. Tests against 0, not alphaFloor — by
- * this point `tightenAlpha` has already zeroed everything below the floor and
- * reshaped the rest, so any pixel with alpha left has already been judged real.
- */
-function columnRuns(data: Uint8ClampedArray, w: number, h: number): ColumnRun[] {
-  const occupied = new Uint8Array(w);
-  for (let x = 0; x < w; x++) {
-    for (let y = 0; y < h; y++) {
-      if (data[(y * w + x) * 4 + 3] > 0) {
-        occupied[x] = 1;
-        break;
-      }
-    }
-  }
-
-  const runs: ColumnRun[] = [];
-  let start = -1;
-  for (let x = 0; x <= w; x++) {
-    const on = x < w && occupied[x] === 1;
-    if (on && start === -1) start = x;
-    if (!on && start !== -1) {
-      runs.push({ x0: start, x1: x, mass: 0 });
-      start = -1;
-    }
-  }
-
-  for (const run of runs) {
-    let mass = 0;
-    for (let y = 0; y < h; y++) {
-      for (let x = run.x0; x < run.x1; x++) {
-        if (data[(y * w + x) * 4 + 3] > 0) mass++;
-      }
-    }
-    run.mass = mass;
-  }
-  return runs;
-}
-
-/** Crops to one column band, tightened vertically and padded like a normal trim. */
-function cropRun(source: HTMLCanvasElement, data: Uint8ClampedArray, w: number, h: number, run: ColumnRun): HTMLCanvasElement {
-  let minY = h;
-  let maxY = -1;
-  for (let y = 0; y < h; y++) {
-    for (let x = run.x0; x < run.x1; x++) {
-      if (data[(y * w + x) * 4 + 3] > 0) {
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-        break;
-      }
-    }
-  }
-
-  const pad = Math.ceil(Math.max(run.x1 - run.x0, maxY - minY) * 0.03);
-  const x0 = Math.max(0, run.x0 - pad);
-  const y0 = Math.max(0, minY - pad);
-  const cw = Math.min(w, run.x1 + pad) - x0;
-  const ch = Math.min(h, maxY + pad + 1) - y0;
-
-  const out = document.createElement('canvas');
-  out.width = cw;
-  out.height = ch;
-  out.getContext('2d')!.drawImage(source, x0, y0, cw, ch, 0, 0, cw, ch);
-  return out;
 }
 
 /**

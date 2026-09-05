@@ -11,8 +11,6 @@ interface PieceFit {
   item: JewelryItem | null;
   calibration: Calibration;
   onChange: (patch: Partial<Calibration>) => void;
-  onSave?: () => void;
-  saving?: boolean;
 }
 
 /**
@@ -47,10 +45,19 @@ export function SpecRail({
   const active = tab === 'earring' && earring.item ? earring : necklace;
   const activeKind: FitTarget = tab === 'earring' && earring.item ? 'earring' : 'necklace';
 
+  const earWidth =
+    diagnostics.earL && diagnostics.earR
+      ? (diagnostics.earL.width + diagnostics.earR.width) / 2
+      : (diagnostics.earL ?? diagnostics.earR)?.width ?? null;
+
   const spanMm =
-    activeKind === 'necklace' && diagnostics.anchor
-      ? Math.round(diagnostics.anchor.width * active.calibration.scale * 0.42)
-      : null;
+    activeKind === 'necklace'
+      ? diagnostics.anchor
+        ? Math.round(diagnostics.anchor.width * active.calibration.scale * 0.42)
+        : null
+      : earWidth !== null
+        ? Math.round(earWidth * active.calibration.scale)
+        : null;
 
   return (
     <aside className="case-panel flex h-full flex-col">
@@ -175,11 +182,6 @@ export function SpecRail({
         <button type="button" onClick={onReset} className="ghost-button flex-1">
           Reset
         </button>
-        {active.onSave && (
-          <button type="button" onClick={active.onSave} disabled={!active.item || active.saving} className="gilt-button flex-1">
-            {active.saving ? 'Saving' : 'Save fit'}
-          </button>
-        )}
       </div>
     </aside>
   );
@@ -250,6 +252,7 @@ function Gauge({
         max={max}
         step={step}
         value={value}
+        aria-valuetext={format(value)}
         onChange={(e) => onChange(Number(e.target.value))}
         className="mt-2.5"
       />
