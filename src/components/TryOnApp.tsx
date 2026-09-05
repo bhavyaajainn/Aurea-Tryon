@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { nanoid } from 'nanoid';
 import type { CutoutResult } from '@/lib/cutout';
+import { detectNecklaceLength } from '@/lib/necklaceLength';
 import { SEED_LOOKS, type SeedLook } from '@/lib/seeds';
-import { DEFAULT_CALIBRATION, type JewelryItem } from '@/lib/types';
+import { DEFAULT_CALIBRATION, NECKLACE_LENGTH_PRESETS, type JewelryItem, type NecklaceLength } from '@/lib/types';
 import { useTryOn } from '@/lib/store';
 import { MirrorStage } from './MirrorStage';
 import { PieceUploader } from './PieceUploader';
@@ -23,6 +24,27 @@ export function TryOnApp() {
   const [necklaceCutout, setNecklaceCutout] = useState<CutoutResult | null>(null);
   const [leftEarCutout, setLeftEarCutout] = useState<CutoutResult | null>(null);
   const [rightEarCutout, setRightEarCutout] = useState<CutoutResult | null>(null);
+
+  // Guessed from the cut-out's shape each time a fresh necklace comes in;
+  // once the wearer taps a length pill themselves, their choice sticks until
+  // the piece is removed.
+  const [necklaceLength, setNecklaceLength] = useState<NecklaceLength>('standard');
+  const [necklaceLengthTouched, setNecklaceLengthTouched] = useState(false);
+
+  function handleNecklaceCutoutChange(next: CutoutResult | null) {
+    setNecklaceCutout(next);
+    if (!next) {
+      setNecklaceLength('standard');
+      setNecklaceLengthTouched(false);
+    } else if (!necklaceLengthTouched) {
+      setNecklaceLength(detectNecklaceLength(next.width, next.height));
+    }
+  }
+
+  function handleNecklaceLengthChange(length: NecklaceLength) {
+    setNecklaceLength(length);
+    setNecklaceLengthTouched(true);
+  }
 
   const canContinue = Boolean(necklaceCutout || leftEarCutout || rightEarCutout);
 
@@ -44,7 +66,7 @@ export function TryOnApp() {
   }
 
   function continueToMirror() {
-    const necklace = necklaceCutout ? toNecklaceItem(necklaceCutout) : null;
+    const necklace = necklaceCutout ? toNecklaceItem(necklaceCutout, necklaceLength) : null;
     const earring = toEarringItem(leftEarCutout, rightEarCutout);
     wearPieces(necklace, earring);
     enterMirror();
@@ -68,44 +90,62 @@ export function TryOnApp() {
   }
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       <section className="text-center">
         <span className="hallmark">Virtual jewelry try-on</span>
-        <h1 className="mx-auto mt-3 max-w-2xl font-display text-[clamp(28px,5vw,44px)] font-light leading-[1.15] text-bone">
-          See your own necklace and earrings on, before you ever put them on
+        <h1 className="mx-auto mt-3 max-w-xl font-display text-[clamp(24px,4.2vw,36px)] font-light leading-[1.2] text-bone">
+          Try on your jewellery in seconds
         </h1>
-        <p className="mx-auto mt-4 max-w-lg text-[14px] leading-relaxed text-ash">
-          Upload a photo of the piece, straighten it, erase what doesn&apos;t belong — then look in the mirror. Your
-          camera and your photos stay on this device; nothing is uploaded to a server, and nothing is kept once you
-          leave.
+        <p className="mx-auto mt-3 max-w-md text-[13px] leading-relaxed text-ash">
+          Upload a photo below, then see it on you in the mirror. Everything stays on this device — nothing is
+          uploaded or saved.
         </p>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-3">
-        <PieceUploader
-          label="Necklace or pendant"
-          hint="A single piece works best, laid flat or hung against a plain surface."
-          cutout={necklaceCutout}
-          onChange={setNecklaceCutout}
-        />
-        <PieceUploader
-          label="Left earring"
-          hint="Photograph it alone. Mirrored onto the right ear if you skip that box."
-          cutout={leftEarCutout}
-          onChange={setLeftEarCutout}
-        />
-        <PieceUploader
-          label="Right earring"
-          hint="Optional — add it only if it looks different from the left."
-          cutout={rightEarCutout}
-          onChange={setRightEarCutout}
-        />
+      <section>
+        <div className="mb-3 flex items-center gap-2.5">
+          <StepBadge>1</StepBadge>
+          <span className="hallmark">Add your jewellery</span>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <PieceUploader
+            label="Necklace or pendant"
+            badge="Start here"
+            hint="A single piece works best, laid flat or hung against a plain surface."
+            cutout={necklaceCutout}
+            onChange={handleNecklaceCutoutChange}
+            lengthPicker={{ value: necklaceLength, onChange: handleNecklaceLengthChange }}
+          />
+          <PieceUploader
+            label="Left earring"
+            badge="Optional"
+            hint="Photograph it alone. Mirrored onto the right ear if you skip that box."
+            cutout={leftEarCutout}
+            onChange={setLeftEarCutout}
+          />
+          <PieceUploader
+            label="Right earring"
+            badge="Optional"
+            hint="Add it only if it looks different from the left."
+            cutout={rightEarCutout}
+            onChange={setRightEarCutout}
+          />
+        </div>
       </section>
 
-      <section className="flex justify-center">
-        <button type="button" onClick={continueToMirror} disabled={!canContinue} className="gilt-button px-8 py-3">
-          Step in front of the mirror
-        </button>
+      <section>
+        <div className="mb-3 flex items-center gap-2.5">
+          <StepBadge>2</StepBadge>
+          <span className="hallmark">See it on you</span>
+        </div>
+        <div className="flex flex-col items-center gap-2">
+          <button type="button" onClick={continueToMirror} disabled={!canContinue} className="gilt-button w-full max-w-xs px-8 py-3">
+            Step in front of the mirror
+          </button>
+          {!canContinue && (
+            <p className="text-[11px] leading-relaxed text-ash">Add at least one piece above to continue.</p>
+          )}
+        </div>
       </section>
 
       <section className="case-panel p-5">
@@ -113,7 +153,7 @@ export function TryOnApp() {
           <span className="hallmark">No jewellery on hand?</span>
         </div>
         <p className="mt-2 text-[12px] leading-relaxed text-ash">
-          Borrow one of these to see how the mirror works, then come back and upload your own.
+          Skip the upload — try one of these sample pieces instead.
         </p>
         <ul className="mt-4 flex gap-3 overflow-x-auto pb-1">
           {SEED_LOOKS.map((look) => (
@@ -143,7 +183,15 @@ export function TryOnApp() {
   );
 }
 
-function toNecklaceItem(cutout: CutoutResult): JewelryItem {
+function StepBadge({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-champagne/40 font-mono text-[10px] text-champagne">
+      {children}
+    </span>
+  );
+}
+
+function toNecklaceItem(cutout: CutoutResult, length: NecklaceLength): JewelryItem {
   return {
     id: `own-necklace-${nanoid(6)}`,
     kind: 'necklace',
@@ -154,7 +202,7 @@ function toNecklaceItem(cutout: CutoutResult): JewelryItem {
     thumbUrl: cutout.thumbDataUrl,
     width: cutout.width,
     height: cutout.height,
-    calibration: { ...DEFAULT_CALIBRATION },
+    calibration: { ...DEFAULT_CALIBRATION, ...NECKLACE_LENGTH_PRESETS[length] },
     createdAt: new Date().toISOString(),
   };
 }

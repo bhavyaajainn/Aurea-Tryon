@@ -3,10 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
-import { Eraser, RotateCcw, RotateCw, SlidersHorizontal } from 'lucide-react';
+import { Eraser, RotateCcw, RotateCw, SlidersHorizontal, UploadCloud } from 'lucide-react';
 import { cutOutJewelry, rotateCutout, type CutoutResult } from '@/lib/cutout';
+import { NECKLACE_LENGTH_LABELS, type NecklaceLength } from '@/lib/types';
 import { CutoutEraser } from './CutoutEraser';
 import { ImageFilterEditor } from './ImageFilterEditor';
+
+const NECKLACE_LENGTHS: NecklaceLength[] = ['choker', 'standard', 'long'];
 
 type Stage = 'idle' | 'processing' | 'ready' | 'error';
 
@@ -20,13 +23,19 @@ type Stage = 'idle' | 'processing' | 'ready' | 'error';
 export function PieceUploader({
   label,
   hint,
+  badge,
   cutout,
   onChange,
+  lengthPicker,
 }: {
   label: string;
   hint: string;
+  /** Small tag next to the label — e.g. "Start here" or "Optional". */
+  badge?: string;
   cutout: CutoutResult | null;
   onChange: (cutout: CutoutResult | null) => void;
+  /** Necklace-only: lets the wearer confirm or correct the auto-detected length. */
+  lengthPicker?: { value: NecklaceLength; onChange: (value: NecklaceLength) => void };
 }) {
   const [stage, setStage] = useState<Stage>(cutout ? 'ready' : 'idle');
   const [progress, setProgress] = useState<{ label: string; ratio: number } | null>(null);
@@ -114,7 +123,14 @@ export function PieceUploader({
     >
       <div className="flex items-start justify-between gap-2 px-4 pt-4">
         <div>
-          <p className="font-display text-[16px] font-light leading-snug text-bone">{label}</p>
+          <div className="flex items-center gap-2">
+            <p className="font-display text-[16px] font-light leading-snug text-bone">{label}</p>
+            {badge && (
+              <span className="rounded-[2px] border border-champagne/30 bg-champagne/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-champagne">
+                {badge}
+              </span>
+            )}
+          </div>
           <p className="mt-1 text-[11px] leading-relaxed text-ash">{hint}</p>
         </div>
         {stage === 'ready' && (
@@ -157,8 +173,9 @@ export function PieceUploader({
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            className="flex flex-col items-center gap-2 text-center"
+            className="flex flex-col items-center gap-2.5 text-center"
           >
+            <UploadCloud size={22} className="text-champagne/70" aria-hidden="true" />
             <span className="gilt-button">Choose a photo</span>
             <span className="max-w-[200px] text-[11px] leading-relaxed text-ash">
               or drop one here — any background, light or dark
@@ -273,6 +290,31 @@ export function PieceUploader({
           <p className="text-right font-mono text-[10px] uppercase tracking-[0.14em] text-ash/70">
             {cutout?.width}×{cutout?.height}
           </p>
+          {lengthPicker && (
+            <div className="border-t border-white/[0.06] pt-2.5">
+              <p className="text-[11px] leading-relaxed text-ash">
+                How it&apos;s worn — we guessed, tap to correct:
+              </p>
+              <div className="mt-2 flex gap-1 rounded-[2px] border border-white/10 p-1">
+                {NECKLACE_LENGTHS.map((length) => (
+                  <button
+                    key={length}
+                    type="button"
+                    onClick={() => lengthPicker.onChange(length)}
+                    aria-pressed={lengthPicker.value === length}
+                    className={clsx(
+                      'flex-1 rounded-[1px] px-2 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors',
+                      lengthPicker.value === length
+                        ? 'bg-champagne/15 text-champagne'
+                        : 'text-ash hover:text-bone',
+                    )}
+                  >
+                    {NECKLACE_LENGTH_LABELS[length]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

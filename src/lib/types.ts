@@ -47,6 +47,28 @@ export const DEFAULT_CALIBRATION: Calibration = {
   spread: 0,
 };
 
+/**
+ * How a necklace sits on the neck, at a glance — the one thing most people
+ * already know about their own piece without measuring anything. Used to pick
+ * a sane starting fit instead of dropping every upload at the same default.
+ */
+export type NecklaceLength = 'choker' | 'standard' | 'long';
+
+export const NECKLACE_LENGTH_PRESETS: Record<NecklaceLength, Partial<Calibration>> = {
+  // Sits snug at the throat: little to no drop, almost no slack.
+  choker: { offsetY: -0.3, curve: 0.15 },
+  // The common case: rests at the collarbone, a natural amount of drape.
+  standard: { offsetY: 0, curve: 0.45 },
+  // Falls well below the collarbone: more drop, more slack in the chain.
+  long: { offsetY: 0.3, curve: 0.65 },
+};
+
+export const NECKLACE_LENGTH_LABELS: Record<NecklaceLength, string> = {
+  choker: 'Choker',
+  standard: 'Standard',
+  long: 'Long',
+};
+
 export interface JewelryItem {
   id: string;
   /** Which anchor this piece follows: the collarbone hollow, or an earlobe. */
