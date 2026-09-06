@@ -1,7 +1,7 @@
 import { ImageResponse } from 'next/og';
 import { LOGOMARK_FACETS_PATH, LOGOMARK_OUTLINE_PATH } from '@/lib/logomark';
 
-export const size = { width: 32, height: 32 };
+export const size = { width: 48, height: 48 };
 export const contentType = 'image/png';
 
 export default function Icon() {
@@ -15,10 +15,10 @@ export default function Icon() {
           alignItems: 'center',
           justifyContent: 'center',
           background: '#120D15',
-          borderRadius: 6,
+          borderRadius: 9,
         }}
       >
-        <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
+        <svg width="33" height="33" viewBox="0 0 32 32" fill="none">
           <path d={LOGOMARK_OUTLINE_PATH} stroke="#E2C68B" strokeWidth="2" strokeLinejoin="round" />
           <path
             d={LOGOMARK_FACETS_PATH}
